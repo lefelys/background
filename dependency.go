@@ -1,13 +1,13 @@
-package state
+package background
 
 import (
 	"context"
 	"sync"
 )
 
-type dependState struct {
+type dependBackground struct {
 	children *group
-	parent   State
+	parent   Background
 
 	finished chan struct{}
 	ready    chan struct{}
@@ -15,21 +15,21 @@ type dependState struct {
 	sync.RWMutex
 }
 
-// withDependency returns new state with merged parent and children
+// withDependency returns new Background with merged parent and children
 // with parent's dependency set on children.
-func withDependency(parent State, children ...State) *dependState {
-	return &dependState{
+func withDependency(parent Background, children ...Background) *dependBackground {
+	return &dependBackground{
 		children: merge(children...),
 		parent:   parent,
 		finished: make(chan struct{}),
 	}
 }
 
-func (d *dependState) Shutdown(ctx context.Context) error {
+func (d *dependBackground) Shutdown(ctx context.Context) error {
 	return shutdown(ctx, d)
 }
 
-func (d *dependState) close() {
+func (d *dependBackground) close() {
 	d.children.close()
 	<-d.children.finishSig()
 
@@ -38,7 +38,7 @@ func (d *dependState) close() {
 	d.Done()
 }
 
-func (d *dependState) Done() {
+func (d *dependBackground) Done() {
 	d.Lock()
 	defer d.Unlock()
 	select {
@@ -49,12 +49,12 @@ func (d *dependState) Done() {
 	}
 }
 
-func (d *dependState) Wait() {
+func (d *dependBackground) Wait() {
 	d.children.Wait()
 	d.parent.Wait()
 }
 
-func (d *dependState) Ready() <-chan struct{} {
+func (d *dependBackground) Ready() <-chan struct{} {
 	d.Lock()
 	defer d.Unlock()
 
@@ -74,13 +74,13 @@ func (d *dependState) Ready() <-chan struct{} {
 	return d.ready
 }
 
-func (d *dependState) Err() (err error) {
+func (d *dependBackground) Err() (err error) {
 	if err = d.parent.Err(); err != nil {
 		return err
 	}
 
-	for _, states := range d.children.states {
-		if err = states.Err(); err != nil {
+	for _, backgrounds := range d.children.backgrounds {
+		if err = backgrounds.Err(); err != nil {
 			return err
 		}
 	}
@@ -88,13 +88,13 @@ func (d *dependState) Err() (err error) {
 	return
 }
 
-func (d *dependState) Value(key interface{}) (value interface{}) {
+func (d *dependBackground) Value(key interface{}) (value interface{}) {
 	if value = d.parent.Value(key); value != nil {
 		return value
 	}
 
-	for _, states := range d.children.states {
-		if value = states.Value(key); value != nil {
+	for _, backgrounds := range d.children.backgrounds {
+		if value = backgrounds.Value(key); value != nil {
 			return value
 		}
 	}
@@ -102,19 +102,19 @@ func (d *dependState) Value(key interface{}) (value interface{}) {
 	return
 }
 
-func (d *dependState) DependsOn(children ...State) State {
+func (d *dependBackground) DependsOn(children ...Background) Background {
 	return d.dependsOn(children...)
 }
 
-func (d *dependState) dependsOn(children ...State) *dependState {
+func (d *dependBackground) dependsOn(children ...Background) *dependBackground {
 	return withDependency(d, children...)
 }
 
-func (d *dependState) finishSig() <-chan struct{} {
+func (d *dependBackground) finishSig() <-chan struct{} {
 	return d.finished
 }
 
-func (d *dependState) cause() error {
+func (d *dependBackground) cause() error {
 	err := d.children.cause()
 	if err != nil {
 		return err

@@ -1,33 +1,33 @@
-package state
+package background
 
 import (
 	"context"
 	"fmt"
 )
 
-type annotationState struct {
+type annotationBackground struct {
 	*group
 
 	annotation string
 }
 
-// WithAnnotation returns new state with merged children and assigned annotation to it.
-func WithAnnotation(message string, children ...State) State {
+// WithAnnotation returns new Background with merged children and assigned annotation to it.
+func WithAnnotation(message string, children ...Background) Background {
 	return withAnnotation(message, children...)
 }
 
-func withAnnotation(message string, children ...State) *annotationState {
-	return &annotationState{
+func withAnnotation(message string, children ...Background) *annotationBackground {
+	return &annotationBackground{
 		group:      merge(children...),
 		annotation: message,
 	}
 }
 
-// Err returns the first encountered error in State's children annotated
-// with state's annotation.
+// Err returns the first encountered error in Background's children annotated
+// with background's annotation.
 // Returns nil if no errors found.
-func (a *annotationState) Err() error {
-	for _, m := range a.states {
+func (a *annotationBackground) Err() error {
+	for _, m := range a.backgrounds {
 		if err := m.Err(); err != nil {
 			return fmt.Errorf("%s: %w", a.annotation, err)
 		}
@@ -36,9 +36,9 @@ func (a *annotationState) Err() error {
 	return nil
 }
 
-// Shutdown shuts down state's children and returns annotated shutdown error.
+// Shutdown shuts down Background's children and returns annotated shutdown error.
 // Returns nil no errors occurred.
-func (a *annotationState) Shutdown(ctx context.Context) error {
+func (a *annotationBackground) Shutdown(ctx context.Context) error {
 	if err := a.group.Shutdown(ctx); err != nil {
 		return fmt.Errorf("%s: %w", a.annotation, err)
 	}
@@ -46,11 +46,11 @@ func (a *annotationState) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (a *annotationState) DependsOn(children ...State) State {
+func (a *annotationBackground) DependsOn(children ...Background) Background {
 	return withDependency(a, children...)
 }
 
-func (a *annotationState) cause() error {
+func (a *annotationBackground) cause() error {
 	if err := a.group.cause(); err != nil {
 		return fmt.Errorf("%s: %w", a.annotation, err)
 	}

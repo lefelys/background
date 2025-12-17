@@ -1,10 +1,10 @@
-package state
+package background
 
 import (
 	"sync"
 )
 
-type readinessState struct {
+type readinessBackground struct {
 	*group
 
 	ready    chan struct{}
@@ -13,18 +13,18 @@ type readinessState struct {
 	sync.Mutex
 }
 
-// ReadinessTail detaches after readiness state initialization.
+// ReadinessTail detaches after readiness Background initialization.
 // The tail is supposed to stay in a background job associated with
-// created State as it carries readiness signal.
+// created Background as it carries readiness signal.
 type ReadinessTail interface {
 	// Ok sends a signal that background job is ready.
 	// Not calling Ok will block all parents readiness and cause
-	// the channel from State's Ready call to block forever.
+	// the channel from Background's Ready call to block forever.
 	// After the first call, subsequent calls do nothing.
 	Ok()
 }
 
-func (r *readinessState) Ok() {
+func (r *readinessBackground) Ok() {
 	r.Lock()
 	defer r.Unlock()
 
@@ -36,13 +36,13 @@ func (r *readinessState) Ok() {
 	}
 }
 
-func WithReadiness(children ...State) (State, ReadinessTail) {
+func WithReadiness(children ...Background) (Background, ReadinessTail) {
 	m := withReadiness(children...)
 	return m, m
 }
 
-func withReadiness(children ...State) *readinessState {
-	s := &readinessState{
+func withReadiness(children ...Background) *readinessBackground {
+	s := &readinessBackground{
 		group: merge(children...),
 		ready: make(chan struct{}),
 	}
@@ -50,7 +50,7 @@ func withReadiness(children ...State) *readinessState {
 	return s
 }
 
-func (r *readinessState) Ready() <-chan struct{} {
+func (r *readinessBackground) Ready() <-chan struct{} {
 	r.Lock()
 	defer r.Unlock()
 
@@ -70,6 +70,6 @@ func (r *readinessState) Ready() <-chan struct{} {
 	return r.readyOut
 }
 
-func (r *readinessState) DependsOn(children ...State) State {
+func (r *readinessBackground) DependsOn(children ...Background) Background {
 	return withDependency(r, children...)
 }

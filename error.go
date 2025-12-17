@@ -1,36 +1,36 @@
-package state
+package background
 
 import (
 	"sync"
 )
 
-type errState struct {
+type errBackground struct {
 	*group
 	err error
 
 	sync.RWMutex
 }
 
-// WithError returns new State with merged children and assigned err to it.
-func WithError(err error, children ...State) State {
+// WithError returns new Background with merged children and assigned err to it.
+func WithError(err error, children ...Background) Background {
 	return withError(err, children...)
 }
 
-func withError(err error, children ...State) *errState {
-	return &errState{
+func withError(err error, children ...Background) *errBackground {
+	return &errBackground{
 		group: merge(children...),
 		err:   err,
 	}
 }
 
-// Err returns error assigned to errState
-func (e *errState) Err() (err error) {
+// Err returns error assigned to errBackground
+func (e *errBackground) Err() (err error) {
 	e.RLock()
 	defer e.RUnlock()
 
 	return e.err
 }
 
-func (e *errState) DependsOn(children ...State) State {
+func (e *errBackground) DependsOn(children ...Background) Background {
 	return withDependency(e, children...)
 }

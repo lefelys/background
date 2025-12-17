@@ -1,17 +1,19 @@
-package state
+package background
 
 import "context"
 
-type emptyState struct{}
+type emptyBackground struct{}
 
-// Empty returns new empty State
-func Empty() State                                     { return emptyState{} }
-func (e emptyState) Err() error                        { return nil }
-func (e emptyState) Shutdown(_ context.Context) error  { return nil }
-func (e emptyState) Wait()                             {}
-func (e emptyState) Ready() <-chan struct{}            { return closedchan }
-func (e emptyState) Value(_ interface{}) interface{}   { return nil }
-func (e emptyState) DependsOn(children ...State) State { return withDependency(e, children...) }
-func (e emptyState) close()                            {}
-func (e emptyState) finishSig() <-chan struct{}        { return closedchan }
-func (e emptyState) cause() error                      { return nil }
+// Empty returns new empty Background
+func Empty() Background                                    { return emptyBackground{} }
+func (e emptyBackground) Err() error                       { return nil }
+func (e emptyBackground) Shutdown(_ context.Context) error { return nil }
+func (e emptyBackground) Wait()                            {}
+func (e emptyBackground) Ready() <-chan struct{}           { return closedchan }
+func (e emptyBackground) Value(_ interface{}) interface{}  { return nil }
+func (e emptyBackground) DependsOn(children ...Background) Background {
+	return withDependency(e, children...)
+}
+func (e emptyBackground) close()                     {}
+func (e emptyBackground) finishSig() <-chan struct{} { return closedchan }
+func (e emptyBackground) cause() error               { return nil }

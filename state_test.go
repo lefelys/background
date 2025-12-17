@@ -1,4 +1,4 @@
-package state
+package background
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestParallel(t *testing.T) {
-	t.Run("state", func(t *testing.T) {
+	t.Run("background", func(t *testing.T) {
 		// Group
 		t.Run("GroupClose", GroupCloseTest)
 		t.Run("GroupSuccessiveClose", GroupSuccessiveCloseTest)
@@ -76,17 +76,17 @@ func TestParallel(t *testing.T) {
 const (
 	failTimeout = 100 * time.Millisecond
 
-	errInitClosed    = "shutdown state initialized closed"
-	errNotClosed     = "shutdown state didn't trigger close"
-	errNotFinished   = "shutdown state didn't finish"
-	errClosed        = "unexpected close of shutdown state"
-	errFinished      = "unexpected finish of shutdown state"
-	errTimeout       = "unexpected timeout of shutdown state"
-	errNotWaited     = "wait state didn't wait"
-	errFinishWaiting = "wait state didn't finish waiting"
-	errInitReady     = "readiness state initialized as ready"
-	errNotReady      = "readiness state isn't ready"
-	errReady         = "unexpected readiness of readiness state"
+	errInitClosed    = "shutdown Background initialized closed"
+	errNotClosed     = "shutdown Background didn't trigger close"
+	errNotFinished   = "shutdown Background didn't finish"
+	errClosed        = "unexpected close of shutdown Background"
+	errFinished      = "unexpected finish of shutdown Background"
+	errTimeout       = "unexpected timeout of shutdown Background"
+	errNotWaited     = "wait Background didn't wait"
+	errFinishWaiting = "wait Background didn't finish waiting"
+	errInitReady     = "readiness Background initialized as ready"
+	errNotReady      = "readiness Background isn't ready"
+	errReady         = "unexpected readiness of readiness Background"
 )
 
 func runShutdownable(tail ShutdownTail) (okDone chan struct{}) {
@@ -154,22 +154,22 @@ func GroupCloseTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown()
+		bg1 = withShutdown()
+		bg2 = withShutdown()
 
-		okDone1 = runShutdownable(st1)
-		okDone2 = runShutdownable(st2)
+		okDone1 = runShutdownable(bg1)
+		okDone2 = runShutdownable(bg2)
 
-		st3 = merge(st1, st2)
+		bg3 = merge(bg1, bg2)
 	)
 
-	go st3.close()
+	go bg3.close()
 	closeChanAndPropagate(okDone1, okDone2)
 
 	switch {
-	case hasNotClosed(st1.end, st2.end, st3.done):
+	case hasNotClosed(bg1.end, bg2.end, bg3.done):
 		t.Error(errNotClosed)
-	case hasNotClosed(st1.done, st2.done, st3.finished):
+	case hasNotClosed(bg1.done, bg2.done, bg3.finished):
 		t.Error(errNotFinished)
 	}
 }
@@ -184,16 +184,16 @@ func GroupSuccessiveCloseTest(t *testing.T) {
 	}()
 
 	var (
-		st1 = withShutdown()
+		bg1 = withShutdown()
 
-		okDone1 = runShutdownable(st1)
+		okDone1 = runShutdownable(bg1)
 
-		st3 = merge(st1)
+		bg3 = merge(bg1)
 	)
 
 	closeChanAndPropagate(okDone1)
-	st3.close()
-	st3.close()
+	bg3.close()
+	bg3.close()
 }
 
 func GroupErrorTest(t *testing.T) {
@@ -201,20 +201,20 @@ func GroupErrorTest(t *testing.T) {
 
 	var (
 		err = errors.New("test")
-		st1 = withError(err)
-		st2 = emptyState{}
-		st3 = emptyState{}
+		bg1 = withError(err)
+		bg2 = emptyBackground{}
+		bg3 = emptyBackground{}
 
-		st4 = merge(st1, st2, st3)
-		st5 = merge(st2, st3)
+		bg4 = merge(bg1, bg2, bg3)
+		bg5 = merge(bg2, bg3)
 	)
 
-	if err := st4.Err(); err == nil {
-		t.Errorf("group state with error state didn't return error")
+	if err := bg4.Err(); err == nil {
+		t.Errorf("group Background with error Background didn't return error")
 	}
 
-	if err := st5.Err(); err != nil {
-		t.Errorf("group state without error state returned error")
+	if err := bg5.Err(); err != nil {
+		t.Errorf("group Background without error Background returned error")
 	}
 }
 
@@ -222,16 +222,16 @@ func GroupNilChildTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = emptyState{}
-		st2 = merge(st1, nil)
+		bg1 = emptyBackground{}
+		bg2 = merge(bg1, nil)
 	)
 
-	if len(st2.states) != 1 {
-		t.Errorf("wrong number of group children: want 1, have %d", len(st2.states))
+	if len(bg2.backgrounds) != 1 {
+		t.Errorf("wrong number of group children: want 1, have %d", len(bg2.backgrounds))
 		return
 	}
 
-	if st2.states[0] == nil {
+	if bg2.backgrounds[0] == nil {
 		t.Errorf("group has nil child")
 	}
 }
@@ -242,62 +242,62 @@ func ShutdownWrapTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown(st1)
-		st3 = withShutdown(st2)
+		bg1 = withShutdown()
+		bg2 = withShutdown(bg1)
+		bg3 = withShutdown(bg2)
 
-		okDone1 = runShutdownable(st1)
-		okDone2 = runShutdownable(st2)
-		okDone3 = runShutdownable(st3)
+		okDone1 = runShutdownable(bg1)
+		okDone2 = runShutdownable(bg2)
+		okDone3 = runShutdownable(bg3)
 	)
 
 	if hasClosed(
-		st1.end, st2.end, st3.end,
-		st1.done, st2.done, st3.done,
+		bg1.end, bg2.end, bg3.end,
+		bg1.done, bg2.done, bg3.done,
 	) {
 		t.Error(errInitClosed)
 	}
 
-	go st3.close()
+	go bg3.close()
 	time.Sleep(failTimeout)
 
 	switch {
-	case hasNotClosed(st1.end):
+	case hasNotClosed(bg1.end):
 		t.Error(errNotClosed)
-	case hasClosed(st2.end, st3.end):
+	case hasClosed(bg2.end, bg3.end):
 		t.Error(errClosed)
-	case hasClosed(st1.done, st2.done, st3.done):
+	case hasClosed(bg1.done, bg2.done, bg3.done):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone1)
 
 	switch {
-	case hasNotClosed(st2.end):
+	case hasNotClosed(bg2.end):
 		t.Error(errNotClosed)
-	case hasNotClosed(st1.done):
+	case hasNotClosed(bg1.done):
 		t.Error(errNotFinished)
-	case hasClosed(st3.end):
+	case hasClosed(bg3.end):
 		t.Error(errClosed)
-	case hasClosed(st2.done, st3.done):
+	case hasClosed(bg2.done, bg3.done):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone2)
 
 	switch {
-	case hasNotClosed(st2.done):
+	case hasNotClosed(bg2.done):
 		t.Error(errNotFinished)
-	case hasNotClosed(st3.end):
+	case hasNotClosed(bg3.end):
 		t.Error(errNotClosed)
-	case hasClosed(st3.done):
+	case hasClosed(bg3.done):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone3)
 
-	// st3 must be done
-	if hasNotClosed(st3.done) {
+	// bg3 must be done
+	if hasNotClosed(bg3.done) {
 		t.Error(errNotFinished)
 	}
 }
@@ -312,15 +312,15 @@ func ShutdownSuccessiveDoneTest(t *testing.T) {
 	}()
 
 	var (
-		st1 = withShutdown()
+		bg1 = withShutdown()
 
-		okDone1 = runShutdownable(st1)
+		okDone1 = runShutdownable(bg1)
 	)
 
-	go st1.close()
+	go bg1.close()
 
 	closeChanAndPropagate(okDone1)
-	st1.Done()
+	bg1.Done()
 }
 
 func ShutdownSuccessiveCallTest(t *testing.T) {
@@ -333,23 +333,23 @@ func ShutdownSuccessiveCallTest(t *testing.T) {
 	}()
 
 	var (
-		st1 = withShutdown()
+		bg1 = withShutdown()
 
-		okDone1 = runShutdownable(st1)
+		okDone1 = runShutdownable(bg1)
 	)
 
-	go st1.close()
+	go bg1.close()
 	closeChanAndPropagate(okDone1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st1.Shutdown(ctx)
+	err := bg1.Shutdown(ctx)
 	if err != nil {
 		t.Errorf(errTimeout)
 	}
 
-	err = st1.Shutdown(ctx)
+	err = bg1.Shutdown(ctx)
 	if err != nil {
 		t.Errorf(errTimeout)
 	}
@@ -358,15 +358,15 @@ func ShutdownSuccessiveCallTest(t *testing.T) {
 func ShutdownTimeoutTest(t *testing.T) {
 	t.Parallel()
 
-	st := withShutdown()
+	bg := withShutdown()
 
 	// blocked finish
-	_ = runShutdownable(st)
+	_ = runShutdownable(bg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st.Shutdown(ctx)
+	err := bg.Shutdown(ctx)
 	if !errors.Is(err, ErrTimeout) {
 		t.Errorf("blocked shutdown didn't timeout")
 	}
@@ -376,28 +376,28 @@ func ShutdownUnclosedTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown(st1)
+		bg1 = withShutdown()
+		bg2 = withShutdown(bg1)
 	)
 
-	okDone2 := runShutdownable(st2)
-	okDone1 := runShutdownable(st1)
+	okDone2 := runShutdownable(bg2)
+	okDone1 := runShutdownable(bg1)
 
 	closeChanAndPropagate(okDone1, okDone2)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st2.Shutdown(ctx)
+	err := bg2.Shutdown(ctx)
 	if err != nil {
 		t.Errorf(errTimeout)
 	}
 
-	if err := st1.cause(); err != nil {
+	if err := bg1.cause(); err != nil {
 		t.Errorf(errNotFinished)
 	}
 
-	if err := st2.cause(); err != nil {
+	if err := bg2.cause(); err != nil {
 		t.Errorf(errNotFinished)
 	}
 }
@@ -408,19 +408,19 @@ func WaitTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withWait()
-		st2 = withWait(st1)
-		st3 = withWait(st2)
+		bg1 = withWait()
+		bg2 = withWait(bg1)
+		bg3 = withWait(bg2)
 
-		okDone1 = runWaitable(st1)
-		okDone2 = runWaitable(st2)
-		okDone3 = runWaitable(st3)
+		okDone1 = runWaitable(bg1)
+		okDone2 = runWaitable(bg2)
+		okDone3 = runWaitable(bg3)
 	)
 
 	done := make(chan struct{})
 
 	go func() {
-		st3.Wait()
+		bg3.Wait()
 		close(done)
 	}()
 
@@ -451,46 +451,46 @@ func ReadinessWrapTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withReadiness()
-		st2 = withReadiness(st1)
-		st3 = withReadiness(st2)
+		bg1 = withReadiness()
+		bg2 = withReadiness(bg1)
+		bg3 = withReadiness(bg2)
 	)
 
 	if hasClosed(
-		st1.ready, st2.ready, st3.ready,
+		bg1.ready, bg2.ready, bg3.ready,
 	) {
 		t.Error(errInitReady)
 	}
 
-	st1ReadyC := st1.Ready()
-	st2ReadyC := st2.Ready()
-	st3ReadyC := st3.Ready()
+	bg1ReadyC := bg1.Ready()
+	bg2ReadyC := bg2.Ready()
+	bg3ReadyC := bg3.Ready()
 
-	st3.Ok()
+	bg3.Ok()
 
 	time.Sleep(failTimeout)
 
 	switch {
-	case hasNotClosed(st3.ready):
+	case hasNotClosed(bg3.ready):
 		t.Error(errNotReady)
-	case hasClosed(st1.ready, st2.ready, st1ReadyC, st2ReadyC, st3ReadyC):
+	case hasClosed(bg1.ready, bg2.ready, bg1ReadyC, bg2ReadyC, bg3ReadyC):
 		t.Error(errReady)
 	}
 
-	st2.Ok()
+	bg2.Ok()
 	time.Sleep(failTimeout)
 
 	switch {
-	case hasNotClosed(st2.ready, st3.ready):
+	case hasNotClosed(bg2.ready, bg3.ready):
 		t.Error(errNotReady)
-	case hasClosed(st1.ready, st1ReadyC, st2ReadyC, st3ReadyC):
+	case hasClosed(bg1.ready, bg1ReadyC, bg2ReadyC, bg3ReadyC):
 		t.Error(errReady)
 	}
 
-	st1.Ok()
+	bg1.Ok()
 	time.Sleep(failTimeout)
 
-	if hasNotClosed(st1.ready, st2.ready, st3.ready, st1ReadyC, st2ReadyC, st3ReadyC) {
+	if hasNotClosed(bg1.ready, bg2.ready, bg3.ready, bg1ReadyC, bg2ReadyC, bg3ReadyC) {
 		t.Error(errNotReady)
 	}
 }
@@ -504,12 +504,12 @@ func ReadinessSuccessiveOkTest(t *testing.T) {
 		}
 	}()
 
-	st1 := withReadiness()
+	bg1 := withReadiness()
 
-	st1.Ok()
-	st1.Ok()
-	st1.Ok()
-	readyC := st1.Ready()
+	bg1.Ok()
+	bg1.Ok()
+	bg1.Ok()
+	readyC := bg1.Ready()
 
 	time.Sleep(failTimeout)
 
@@ -527,9 +527,9 @@ func ReadinessSuccessiveReadyTest(t *testing.T) {
 		}
 	}()
 
-	st1 := withReadiness()
-	st1.Ok()
-	readyC := st1.Ready()
+	bg1 := withReadiness()
+	bg1.Ok()
+	readyC := bg1.Ready()
 
 	time.Sleep(failTimeout)
 
@@ -537,7 +537,7 @@ func ReadinessSuccessiveReadyTest(t *testing.T) {
 		t.Error(errNotReady)
 	}
 
-	readyC = st1.Ready()
+	readyC = bg1.Ready()
 
 	if hasNotClosed(readyC) {
 		t.Error(errNotReady)
@@ -554,12 +554,12 @@ func ValueWrapTest(t *testing.T) {
 	var (
 		testKey   = key("test_key")
 		testValue = "test_value"
-		st1       = withValue(testKey, testValue)
-		st2       = withWait(st1)
-		st3       = withWait(st2)
+		bg1       = withValue(testKey, testValue)
+		bg2       = withWait(bg1)
+		bg3       = withWait(bg2)
 	)
 
-	value := st3.Value(testKey)
+	value := bg3.Value(testKey)
 	if value == nil {
 		t.Error("test value for test key not found")
 	}
@@ -585,11 +585,11 @@ func ValueChildrenTest(t *testing.T) {
 		testValue2 = "test_value2"
 
 		testKeyNotFound = key("test_key3")
-		st1             = withValue(testKey1, testValue1)
-		st2             = withValue(testKey2, testValue2, st1)
+		bg1             = withValue(testKey1, testValue1)
+		bg2             = withValue(testKey2, testValue2, bg1)
 	)
 
-	value := st2.Value(testKey1)
+	value := bg2.Value(testKey1)
 	if value == nil {
 		t.Error("test value 1 for test key not found")
 	}
@@ -603,7 +603,7 @@ func ValueChildrenTest(t *testing.T) {
 		t.Errorf("wrong test value 1: want %s have %s", testValue1, valueTyped)
 	}
 
-	value2 := st2.Value(testKey2)
+	value2 := bg2.Value(testKey2)
 	if value2 == nil {
 		t.Error("test value 2 for test key not found")
 	}
@@ -617,7 +617,7 @@ func ValueChildrenTest(t *testing.T) {
 		t.Errorf("wrong test value 2: want %s have %s", testValue1, valueTyped)
 	}
 
-	value3 := st2.Value(testKeyNotFound)
+	value3 := bg2.Value(testKeyNotFound)
 	if value3 != nil {
 		t.Error("unused key returned non-nil value")
 	}
@@ -658,12 +658,12 @@ func AnnotationErrorTest(t *testing.T) {
 		err1 = errors.New("error1")
 		err2 = errors.New("error2")
 
-		st1 = withError(err1)
-		st2 = withError(err2, st1)
-		st3 = withAnnotation(annotation, st2)
+		bg1 = withError(err1)
+		bg2 = withError(err2, bg1)
+		bg3 = withAnnotation(annotation, bg2)
 	)
 
-	err := st3.Err()
+	err := bg3.Err()
 
 	// err2 is higher in the tree so it must be found first
 	if !errors.Is(err, err2) {
@@ -676,7 +676,7 @@ func AnnotationErrorTest(t *testing.T) {
 		t.Errorf("timeout error is not annotated, want error '%s', have '%s'", wantErrStr, err.Error())
 	}
 
-	err = st1.Err()
+	err = bg1.Err()
 	if !errors.Is(err, err1) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err)
 	}
@@ -687,16 +687,16 @@ func AnnotationShutdownTimeoutTest(t *testing.T) {
 
 	const annotation = "test"
 
-	st1 := withShutdown()
-	st2 := withAnnotation(annotation, st1)
+	bg1 := withShutdown()
+	bg2 := withAnnotation(annotation, bg1)
 
 	// blocked finish
-	_ = runShutdownable(st1)
+	_ = runShutdownable(bg1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st2.Shutdown(ctx)
+	err := bg2.Shutdown(ctx)
 	if !errors.Is(err, ErrTimeout) {
 		t.Errorf("blocked shutdown didn't timeout")
 	}
@@ -713,18 +713,18 @@ func AnnotationChildShutdownTimeoutTest(t *testing.T) {
 
 	const annotation = "test"
 
-	st1 := withShutdown()
-	st2 := withAnnotation(annotation, st1)
-	st3 := withShutdown(st2)
+	bg1 := withShutdown()
+	bg2 := withAnnotation(annotation, bg1)
+	bg3 := withShutdown(bg2)
 
 	// blocked finish
-	_ = runShutdownable(st1)
-	_ = runShutdownable(st3)
+	_ = runShutdownable(bg1)
+	_ = runShutdownable(bg3)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st3.Shutdown(ctx)
+	err := bg3.Shutdown(ctx)
 	if !errors.Is(err, ErrTimeout) {
 		t.Errorf("blocked shutdown didn't timeout")
 	}
@@ -741,30 +741,30 @@ func AnnotationNilErrorTest(t *testing.T) {
 
 	const message = "test"
 
-	st1 := withError(nil)
-	st2 := withAnnotation(message, st1)
+	bg1 := withError(nil)
+	bg2 := withAnnotation(message, bg1)
 
-	if err := st2.Err(); err != nil {
-		t.Errorf("annotated state returned error instead of nil")
+	if err := bg2.Err(); err != nil {
+		t.Errorf("annotated Background returned error instead of nil")
 	}
 }
 
 func AnnotationNilShutdownErrorTest(t *testing.T) {
 	t.Parallel()
 
-	st1 := withShutdown()
-	st2 := withAnnotation("", st1)
+	bg1 := withShutdown()
+	bg2 := withAnnotation("", bg1)
 
 	// blocked finish
-	okDone1 := runShutdownable(st1)
+	okDone1 := runShutdownable(bg1)
 
 	closeChanAndPropagate(okDone1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	if err := st2.Shutdown(ctx); err != nil {
-		t.Errorf("annotation state returned error instead of nil")
+	if err := bg2.Shutdown(ctx); err != nil {
+		t.Errorf("annotation Background returned error instead of nil")
 	}
 }
 
@@ -772,27 +772,27 @@ func AnnotationUnclosedTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withAnnotation("", st1)
+		bg1 = withShutdown()
+		bg2 = withAnnotation("", bg1)
 	)
 
-	okDone1 := runShutdownable(st1)
+	okDone1 := runShutdownable(bg1)
 
 	closeChanAndPropagate(okDone1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st2.Shutdown(ctx)
+	err := bg2.Shutdown(ctx)
 	if err != nil {
 		t.Errorf(errTimeout)
 	}
 
-	if err := st1.cause(); err != nil {
+	if err := bg1.cause(); err != nil {
 		t.Errorf(errNotFinished)
 	}
 
-	if err := st2.cause(); err != nil {
+	if err := bg2.cause(); err != nil {
 		t.Errorf(errNotFinished)
 	}
 }
@@ -806,18 +806,18 @@ func ErrorTest(t *testing.T) {
 		err1 = errors.New("error1")
 		err2 = errors.New("error2")
 
-		st1 = withError(err1)
-		st2 = withError(err2, st1)
+		bg1 = withError(err1)
+		bg2 = withError(err2, bg1)
 	)
 
-	err := st2.Err()
+	err := bg2.Err()
 
 	// err2 is higher in the tree so it must be found first
 	if !errors.Is(err, err2) {
 		t.Errorf("wrong error, want '%v', have '%v'", err2, err)
 	}
 
-	err = st1.Err()
+	err = bg1.Err()
 	if !errors.Is(err, err1) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err)
 	}
@@ -833,21 +833,21 @@ func ErrorGroupTest(t *testing.T) {
 	var (
 		err1 = errors.New("error1")
 		err2 = errors.New("error2")
-		st1  = withErrorGroup()
-		st2  = withAnnotation(annotation, st1)
+		bg1  = withErrorGroup()
+		bg2  = withAnnotation(annotation, bg1)
 	)
 
-	if err := st2.Err(); err != nil {
-		t.Errorf("new error group state returned error")
+	if err := bg2.Err(); err != nil {
+		t.Errorf("new error group Background returned error")
 	}
 
 	go func() {
-		st1.Error(err1)
+		bg1.Error(err1)
 	}()
 
 	time.Sleep(failTimeout)
 
-	err := st2.Err()
+	err := bg2.Err()
 
 	if !errors.Is(err, err1) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err)
@@ -860,12 +860,12 @@ func ErrorGroupTest(t *testing.T) {
 	}
 
 	go func() {
-		st1.Error(err2)
+		bg1.Error(err2)
 	}()
 
 	time.Sleep(failTimeout)
 
-	err = st2.Err()
+	err = bg2.Err()
 
 	if errors.Is(err, err2) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err2)
@@ -880,21 +880,21 @@ func ErrorGroupErrorfTest(t *testing.T) {
 	var (
 		err1 = errors.New("error1")
 		err2 = errors.New("error2")
-		st1  = withErrorGroup()
-		st2  = merge(st1)
+		bg1  = withErrorGroup()
+		bg2  = merge(bg1)
 	)
 
-	if err := st2.Err(); err != nil {
-		t.Errorf("new error group state returned error")
+	if err := bg2.Err(); err != nil {
+		t.Errorf("new error group Background returned error")
 	}
 
 	go func() {
-		st1.Errorf(annotation, err1)
+		bg1.Errorf(annotation, err1)
 	}()
 
 	time.Sleep(failTimeout)
 
-	err := st2.Err()
+	err := bg2.Err()
 
 	if !errors.Is(err, err1) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err)
@@ -907,12 +907,12 @@ func ErrorGroupErrorfTest(t *testing.T) {
 	}
 
 	go func() {
-		st1.Errorf(annotation, err2)
+		bg1.Errorf(annotation, err2)
 	}()
 
 	time.Sleep(failTimeout)
 
-	err = st2.Err()
+	err = bg2.Err()
 
 	if errors.Is(err, err2) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err2)
@@ -924,57 +924,57 @@ func ErrorGroupErrorfTest(t *testing.T) {
 func EmptyTest(t *testing.T) {
 	t.Parallel()
 
-	st1 := emptyState{}
+	bg1 := emptyBackground{}
 
-	if err := st1.Err(); err != nil {
-		t.Errorf("empty state returned error")
+	if err := bg1.Err(); err != nil {
+		t.Errorf("empty Background returned error")
 	}
 
-	if err := st1.Shutdown(context.Background()); err != nil {
-		t.Errorf("empty state shutdowned with error")
+	if err := bg1.Shutdown(context.Background()); err != nil {
+		t.Errorf("empty Background shutdowned with error")
 	}
 
 	okDone1 := make(chan struct{})
 
 	go func() {
-		st1.Wait()
+		bg1.Wait()
 		close(okDone1)
 	}()
 
 	time.Sleep(failTimeout)
 
 	if hasNotClosed(okDone1) {
-		t.Errorf("empty state blocked on wait")
+		t.Errorf("empty Background blocked on wait")
 	}
 
-	readyC := st1.Ready()
+	readyC := bg1.Ready()
 	if hasNotClosed(readyC) {
-		t.Errorf("empty state is not ready")
+		t.Errorf("empty Background is not ready")
 	}
 
-	if value := st1.Value(""); value != nil {
-		t.Errorf("empty state returned value")
+	if value := bg1.Value(""); value != nil {
+		t.Errorf("empty Background returned value")
 	}
 
 	okDone2 := make(chan struct{})
 
 	go func() {
-		st1.close()
+		bg1.close()
 		close(okDone2)
 	}()
 
 	time.Sleep(failTimeout)
 
 	if hasNotClosed(okDone2) {
-		t.Errorf("empty state blocked on close")
+		t.Errorf("empty Background blocked on close")
 	}
 
-	if hasNotClosed(st1.finishSig()) {
-		t.Errorf("empty state is not done")
+	if hasNotClosed(bg1.finishSig()) {
+		t.Errorf("empty Background is not done")
 	}
 
-	if err := st1.cause(); err != nil {
-		t.Errorf("empty state cause call returned error")
+	if err := bg1.cause(); err != nil {
+		t.Errorf("empty Background cause call returned error")
 	}
 }
 
@@ -984,50 +984,50 @@ func DependencyShutdownTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown()
-		st3 = withShutdown()
+		bg1 = withShutdown()
+		bg2 = withShutdown()
+		bg3 = withShutdown()
 
-		okDone1 = runShutdownable(st1)
-		okDone2 = runShutdownable(st2)
-		okDone3 = runShutdownable(st3)
+		okDone1 = runShutdownable(bg1)
+		okDone2 = runShutdownable(bg2)
+		okDone3 = runShutdownable(bg3)
 	)
 
-	st4 := withDependency(st3, st1, st2)
+	bg4 := withDependency(bg3, bg1, bg2)
 
 	if hasClosed(
-		st1.end, st2.end, st3.end,
-		st1.done, st2.done, st3.done,
+		bg1.end, bg2.end, bg3.end,
+		bg1.done, bg2.done, bg3.done,
 	) {
 		t.Error(errInitClosed)
 	}
 
-	go st4.close()
+	go bg4.close()
 	time.Sleep(failTimeout)
 
 	switch {
-	case hasNotClosed(st1.end, st2.end):
+	case hasNotClosed(bg1.end, bg2.end):
 		t.Error(errNotClosed)
-	case hasClosed(st3.end):
+	case hasClosed(bg3.end):
 		t.Error(errClosed)
-	case hasClosed(st1.done, st2.done, st3.done):
+	case hasClosed(bg1.done, bg2.done, bg3.done):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone1, okDone2)
 
 	switch {
-	case hasNotClosed(st3.end):
+	case hasNotClosed(bg3.end):
 		t.Error(errNotClosed)
-	case hasNotClosed(st1.done, st2.done):
+	case hasNotClosed(bg1.done, bg2.done):
 		t.Error(errNotFinished)
-	case hasClosed(st3.done):
+	case hasClosed(bg3.done):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone3)
 
-	if hasNotClosed(st3.done) {
+	if hasNotClosed(bg3.done) {
 		t.Error(errNotFinished)
 	}
 }
@@ -1036,64 +1036,64 @@ func DependencyShutdownChainTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown()
-		st3 = withShutdown()
+		bg1 = withShutdown()
+		bg2 = withShutdown()
+		bg3 = withShutdown()
 
-		okDone1 = runShutdownable(st1)
-		okDone2 = runShutdownable(st2)
-		okDone3 = runShutdownable(st3)
+		okDone1 = runShutdownable(bg1)
+		okDone2 = runShutdownable(bg2)
+		okDone3 = runShutdownable(bg3)
 	)
 
-	st4 := withDependency(st3, st1)
-	st4 = withDependency(st4, st2)
+	bg4 := withDependency(bg3, bg1)
+	bg4 = withDependency(bg4, bg2)
 
 	if hasClosed(
-		st1.end, st2.end, st3.end,
-		st1.done, st2.done, st3.done, st4.finished,
+		bg1.end, bg2.end, bg3.end,
+		bg1.done, bg2.done, bg3.done, bg4.finished,
 	) {
 		t.Error(errInitClosed)
 	}
 
-	go st4.close()
+	go bg4.close()
 	time.Sleep(failTimeout)
 
 	switch {
-	case hasNotClosed(st2.end):
+	case hasNotClosed(bg2.end):
 		t.Error(errNotClosed)
-	case hasClosed(st1.end, st3.end):
+	case hasClosed(bg1.end, bg3.end):
 		t.Error(errClosed)
-	case hasClosed(st1.done, st2.done, st3.done, st4.finished):
+	case hasClosed(bg1.done, bg2.done, bg3.done, bg4.finished):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone2)
 
 	switch {
-	case hasNotClosed(st1.end):
+	case hasNotClosed(bg1.end):
 		t.Error(errNotClosed)
-	case hasNotClosed(st2.done):
+	case hasNotClosed(bg2.done):
 		t.Error(errNotFinished)
-	case hasClosed(st3.end):
+	case hasClosed(bg3.end):
 		t.Error(errClosed)
-	case hasClosed(st1.done, st3.done, st4.finished):
+	case hasClosed(bg1.done, bg3.done, bg4.finished):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone1)
 
 	switch {
-	case hasNotClosed(st3.end):
+	case hasNotClosed(bg3.end):
 		t.Error(errNotClosed)
-	case hasNotClosed(st1.done):
+	case hasNotClosed(bg1.done):
 		t.Error(errNotFinished)
-	case hasClosed(st3.done, st4.finished):
+	case hasClosed(bg3.done, bg4.finished):
 		t.Error(errFinished)
 	}
 
 	closeChanAndPropagate(okDone3)
 
-	if hasNotClosed(st3.done, st4.finished) {
+	if hasNotClosed(bg3.done, bg4.finished) {
 		t.Error(errNotFinished)
 	}
 }
@@ -1108,37 +1108,37 @@ func DependencyShutdownSuccessiveCloseTest(t *testing.T) {
 	}()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown()
+		bg1 = withShutdown()
+		bg2 = withShutdown()
 	)
 
-	close(runShutdownable(st1))
-	close(runShutdownable(st2))
+	close(runShutdownable(bg1))
+	close(runShutdownable(bg2))
 
-	st4 := withDependency(st1, st2)
+	bg4 := withDependency(bg1, bg2)
 
-	go st4.close()
+	go bg4.close()
 	time.Sleep(failTimeout)
 
-	st4.close()
+	bg4.close()
 }
 
 func DependencyShutdownChildrenTimeoutTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = emptyState{}
-		st3 = st1.DependsOn(st2)
+		bg1 = withShutdown()
+		bg2 = emptyBackground{}
+		bg3 = bg1.DependsOn(bg2)
 	)
 
 	// blocked finish
-	_ = runShutdownable(st1)
+	_ = runShutdownable(bg1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st3.Shutdown(ctx)
+	err := bg3.Shutdown(ctx)
 	if !errors.Is(err, ErrTimeout) {
 		t.Errorf("blocked shutdown didn't timeout")
 	}
@@ -1148,20 +1148,20 @@ func DependencyShutdownParentTimeoutTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown()
-		st3 = st1.DependsOn(st2)
+		bg1 = withShutdown()
+		bg2 = withShutdown()
+		bg3 = bg1.DependsOn(bg2)
 	)
 
-	okDone1 := runShutdownable(st1)
-	_ = runShutdownable(st2)
+	okDone1 := runShutdownable(bg1)
+	_ = runShutdownable(bg2)
 
 	closeChanAndPropagate(okDone1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st3.Shutdown(ctx)
+	err := bg3.Shutdown(ctx)
 	if !errors.Is(err, ErrTimeout) {
 		t.Errorf("blocked shutdown didn't timeout")
 	}
@@ -1171,26 +1171,26 @@ func DependencyShutdownUnclosedTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withShutdown()
-		st2 = withShutdown()
-		st3 = withDependency(st1, st2)
+		bg1 = withShutdown()
+		bg2 = withShutdown()
+		bg3 = withDependency(bg1, bg2)
 	)
 
 	// blocked finish
-	okDone2 := runShutdownable(st2)
-	okDone1 := runShutdownable(st1)
+	okDone2 := runShutdownable(bg2)
+	okDone1 := runShutdownable(bg1)
 
 	closeChanAndPropagate(okDone1, okDone2)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failTimeout)
 	defer cancel()
 
-	err := st3.Shutdown(ctx)
+	err := bg3.Shutdown(ctx)
 	if err != nil {
 		t.Errorf(errTimeout)
 	}
 
-	if err := st3.cause(); err != nil {
+	if err := bg3.cause(); err != nil {
 		t.Errorf(errNotFinished)
 	}
 }
@@ -1199,21 +1199,21 @@ func DependencyWaitTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withWait()
-		st2 = withWait()
-		st3 = withWait()
+		bg1 = withWait()
+		bg2 = withWait()
+		bg3 = withWait()
 
-		okDone1 = runWaitable(st1)
-		okDone2 = runWaitable(st2)
-		okDone3 = runWaitable(st3)
+		okDone1 = runWaitable(bg1)
+		okDone2 = runWaitable(bg2)
+		okDone3 = runWaitable(bg3)
 
-		st4 = st3.DependsOn(st1, st2)
+		bg4 = bg3.DependsOn(bg1, bg2)
 	)
 
 	done := make(chan struct{})
 
 	go func() {
-		st4.Wait()
+		bg4.Wait()
 		close(done)
 	}()
 
@@ -1240,49 +1240,49 @@ func DependencyReadinessTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withReadiness()
-		st2 = withReadiness()
-		st3 = withReadiness()
+		bg1 = withReadiness()
+		bg2 = withReadiness()
+		bg3 = withReadiness()
 	)
 
-	st4 := withDependency(st3, st1, st2)
+	bg4 := withDependency(bg3, bg1, bg2)
 
 	if hasClosed(
-		st1.ready, st2.ready, st3.ready,
+		bg1.ready, bg2.ready, bg3.ready,
 	) {
 		t.Error(errInitReady)
 	}
 
-	st1ReadyC := st1.Ready()
-	st2ReadyC := st2.Ready()
-	st3ReadyC := st3.Ready()
-	st4ReadyC := st4.Ready()
+	bg1ReadyC := bg1.Ready()
+	bg2ReadyC := bg2.Ready()
+	bg3ReadyC := bg3.Ready()
+	bg4ReadyC := bg4.Ready()
 
-	st1.Ok()
+	bg1.Ok()
 
 	time.Sleep(failTimeout)
 
 	switch {
-	case hasNotClosed(st1.ready, st1ReadyC):
+	case hasNotClosed(bg1.ready, bg1ReadyC):
 		t.Error(errNotReady)
-	case hasClosed(st2.ready, st3.ready, st2ReadyC, st3ReadyC, st4ReadyC):
+	case hasClosed(bg2.ready, bg3.ready, bg2ReadyC, bg3ReadyC, bg4ReadyC):
 		t.Error(errReady)
 	}
 
-	st2.Ok()
+	bg2.Ok()
 	time.Sleep(failTimeout)
 
 	switch {
-	case hasNotClosed(st1.ready, st1ReadyC, st2.ready, st2ReadyC):
+	case hasNotClosed(bg1.ready, bg1ReadyC, bg2.ready, bg2ReadyC):
 		t.Error(errNotReady)
-	case hasClosed(st3.ready, st3ReadyC, st4ReadyC):
+	case hasClosed(bg3.ready, bg3ReadyC, bg4ReadyC):
 		t.Error(errReady)
 	}
 
-	st3.Ok()
+	bg3.Ok()
 	time.Sleep(failTimeout)
 
-	if hasNotClosed(st1.ready, st1ReadyC, st2.ready, st2ReadyC, st3.ready, st3ReadyC, st4ReadyC) {
+	if hasNotClosed(bg1.ready, bg1ReadyC, bg2.ready, bg2ReadyC, bg3.ready, bg3ReadyC, bg4ReadyC) {
 		t.Error(errNotReady)
 	}
 }
@@ -1294,19 +1294,19 @@ func DependencyErrorParentTest(t *testing.T) {
 		err1 = errors.New("error1")
 		err2 = errors.New("error2")
 
-		st1 = withError(err1)
-		st2 = withError(err2)
-		st3 = withDependency(st1, st2)
+		bg1 = withError(err1)
+		bg2 = withError(err2)
+		bg3 = withDependency(bg1, bg2)
 	)
 
-	err := st3.Err()
+	err := bg3.Err()
 
 	// err1 is higher in the tree so it must be found first
 	if !errors.Is(err, err1) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err)
 	}
 
-	err = st2.Err()
+	err = bg2.Err()
 	if !errors.Is(err, err2) {
 		t.Errorf("wrong error, want '%v', have '%v'", err2, err)
 	}
@@ -1318,12 +1318,12 @@ func DependencyErrorChildrenTest(t *testing.T) {
 	var (
 		err1 = errors.New("error1")
 
-		st1 = withError(err1)
-		st2 = emptyState{}
-		st3 = st2.DependsOn(st1)
+		bg1 = withError(err1)
+		bg2 = emptyBackground{}
+		bg3 = bg2.DependsOn(bg1)
 	)
 
-	err := st3.Err()
+	err := bg3.Err()
 
 	if !errors.Is(err, err1) {
 		t.Errorf("wrong error, want '%v', have '%v'", err1, err)
@@ -1334,12 +1334,12 @@ func DependencyErrorNilTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = withError(nil)
-		st2 = emptyState{}
-		st3 = st2.DependsOn(st1)
+		bg1 = withError(nil)
+		bg2 = emptyBackground{}
+		bg3 = bg2.DependsOn(bg1)
 	)
 
-	if err := st3.Err(); err != nil {
+	if err := bg3.Err(); err != nil {
 		t.Errorf("error must be nil, have '%v'", err)
 	}
 }
@@ -1350,14 +1350,14 @@ func DependencyValueParentTest(t *testing.T) {
 	var (
 		testKey   = key("test_key")
 		testValue = "test_value"
-		st1       = emptyState{}
-		st2       = emptyState{}
-		st3       = st2.DependsOn(st1)
-		st4       = withValue(testKey, testValue)
-		st5       = withDependency(st4, st3)
+		bg1       = emptyBackground{}
+		bg2       = emptyBackground{}
+		bg3       = bg2.DependsOn(bg1)
+		bg4       = withValue(testKey, testValue)
+		bg5       = withDependency(bg4, bg3)
 	)
 
-	value := st5.Value(testKey)
+	value := bg5.Value(testKey)
 	if value == nil {
 		t.Error("test value for test key not found")
 	}
@@ -1378,14 +1378,14 @@ func DependencyValueChildrenTest(t *testing.T) {
 	var (
 		testKey   = key("test_key")
 		testValue = "test_value"
-		st1       = withValue(testKey, testValue)
-		st2       = emptyState{}
-		st3       = st2.DependsOn(st1)
-		st4       = emptyState{}
-		st5       = st4.DependsOn(st3)
+		bg1       = withValue(testKey, testValue)
+		bg2       = emptyBackground{}
+		bg3       = bg2.DependsOn(bg1)
+		bg4       = emptyBackground{}
+		bg5       = bg4.DependsOn(bg3)
 	)
 
-	value := st5.Value(testKey)
+	value := bg5.Value(testKey)
 	if value == nil {
 		t.Error("test value for test key not found")
 	}
@@ -1404,27 +1404,27 @@ func DependencyAnnotationTest(t *testing.T) {
 	t.Parallel()
 
 	var (
-		st1 = emptyState{}
-		st2 = emptyState{}
-		st3 = withAnnotation("", st1, st2)
-		st4 = emptyState{}
-		st5 = withDependency(st3, st4)
+		bg1 = emptyBackground{}
+		bg2 = emptyBackground{}
+		bg3 = withAnnotation("", bg1, bg2)
+		bg4 = emptyBackground{}
+		bg5 = withDependency(bg3, bg4)
 	)
 
-	if st5.parent == nil {
-		t.Errorf("parent of dependency state is nil, must be empty state")
+	if bg5.parent == nil {
+		t.Errorf("parent of dependency Background is nil, must be empty Background")
 	}
 
-	if st5.parent != st3 {
-		t.Errorf("wrong parent of dependency state")
+	if bg5.parent != bg3 {
+		t.Errorf("wrong parent of dependency Background")
 	}
 
-	if len(st5.children.states) != 1 {
-		t.Errorf("wrong number of dependency state children, want 1, have %d", len(st5.children.states))
+	if len(bg5.children.backgrounds) != 1 {
+		t.Errorf("wrong number of dependency Background children, want 1, have %d", len(bg5.children.backgrounds))
 		return
 	}
 
-	if st5.children.states[0] != st4 {
-		t.Errorf("wrong children of dependency state")
+	if bg5.children.backgrounds[0] != bg4 {
+		t.Errorf("wrong children of dependency Background")
 	}
 }

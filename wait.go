@@ -1,17 +1,17 @@
-package state
+package background
 
 import (
 	"sync"
 )
 
-type waitState struct {
+type waitBackground struct {
 	*group
 	sync.WaitGroup
 }
 
-// WaitTail detaches after waitable state initialization.
+// WaitTail detaches after waitable background initialization.
 // The tail is supposed to stay in a background job associated with
-// created State.
+// created Background.
 //
 // WaitTail uses sync.WaitGroup and shares all its mechanics.
 type WaitTail interface {
@@ -22,27 +22,27 @@ type WaitTail interface {
 	Add(i int)
 }
 
-// WithWait returns new waitable State with merged children.
+// WithWait returns new waitable Background with merged children.
 //
-// The returned WaitTail is used to increment and decrement State's WaitGroup counter.
-func WithWait(children ...State) (State, WaitTail) {
+// The returned WaitTail is used to increment and decrement Background's WaitGroup counter.
+func WithWait(children ...Background) (Background, WaitTail) {
 	s := withWait(children...)
 
 	return s, s
 }
 
-func withWait(children ...State) *waitState {
-	return &waitState{
+func withWait(children ...Background) *waitBackground {
+	return &waitBackground{
 		group: merge(children...),
 	}
 }
 
-//  Wait blocks until States's and States's children counters are zero.
-func (w *waitState) Wait() {
+// Wait blocks until Backgrounds's and Backgrounds's children counters are zero.
+func (w *waitBackground) Wait() {
 	w.WaitGroup.Wait()
 	w.group.Wait()
 }
 
-func (w *waitState) DependsOn(children ...State) State {
+func (w *waitBackground) DependsOn(children ...Background) Background {
 	return withDependency(w, children...)
 }

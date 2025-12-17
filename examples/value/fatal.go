@@ -3,9 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/lefelys/state"
 	"log"
 	"net/http"
+
+	"github.com/lefelys/background"
 )
 
 type Fatality interface {
@@ -32,13 +33,13 @@ type key int
 
 var fatalKey key
 
-// WithFatality returns state with Fatality value set and its tail.
-// If Fatal state already present in children - returns merged children
+// WithFatality returns Background with Fatality value set and its tail.
+// If Fatal Background already present in children - returns merged children
 // and its tail
-func WithFatality(children ...state.State) (state.State, state.ErrTail) {
+func WithFatality(children ...background.Background) (background.Background, background.ErrTail) {
 	for _, child := range children {
-		if f, ok := FatalityFromState(child); ok {
-			return state.Merge(children...), f.(state.ErrTail)
+		if f, ok := FatalityFromBackground(child); ok {
+			return background.Merge(children...), f.(background.ErrTail)
 		}
 	}
 
@@ -46,14 +47,14 @@ func WithFatality(children ...state.State) (state.State, state.ErrTail) {
 		errCh: make(chan error),
 	}
 
-	return state.WithValue(fatalKey, fatal, children...), fatal
+	return background.WithValue(fatalKey, fatal, children...), fatal
 }
 
-// FatalityFromState returns Fatality value stored in st. If there are
+// FatalityFromBackground returns Fatality value stored in st. If there are
 // multiple values associated with fatalKey in the tree, only
 // the topmost and the leftmost will be returned.
-func FatalityFromState(st state.State) (Fatality, bool) {
-	f, ok := st.Value(fatalKey).(Fatality)
+func FatalityFromBackground(bg background.Background) (Fatality, bool) {
+	f, ok := bg.Value(fatalKey).(Fatality)
 	return f, ok
 }
 
@@ -61,7 +62,7 @@ type Server struct {
 	*http.Server
 }
 
-func NewServer() state.State {
+func NewServer() background.Background {
 	server := &Server{
 		Server: &http.Server{
 			Addr:    ":8000",
@@ -69,13 +70,13 @@ func NewServer() state.State {
 		},
 	}
 
-	st := server.Start()
+	bg := server.Start()
 
-	return state.WithAnnotation("http server", st)
+	return background.WithAnnotation("http server", bg)
 }
 
-func (s *Server) Start() state.State {
-	st, fatalTail := WithFatality()
+func (s *Server) Start() background.Background {
+	bg, fatalTail := WithFatality()
 
 	go func() {
 		err := s.Server.ListenAndServe()
@@ -84,21 +85,21 @@ func (s *Server) Start() state.State {
 		}
 	}()
 
-	return st
+	return bg
 }
 
 func main() {
-	serverSt := NewServer()
-	if err := serverSt.Err(); err != nil {
+	serverBg := NewServer()
+	if err := serverBg.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	fatalSt, ok := FatalityFromState(serverSt)
+	fatalBg, ok := FatalityFromBackground(serverBg)
 	if !ok {
-		log.Fatal("fatality state not found")
+		log.Fatal("fatality background not found")
 	}
 
-	if err := <-fatalSt.Fatal(); err != nil {
+	if err := <-fatalBg.Fatal(); err != nil {
 		log.Fatal(err)
 	}
 }

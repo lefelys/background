@@ -1,4 +1,4 @@
-package state
+package background
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 )
 
 func ExampleWithShutdown() {
-	st := func() State {
-		st, tail := WithShutdown()
+	bg := func() Background {
+		bg, tail := WithShutdown()
 		ticker := time.NewTicker(1 * time.Second)
 
 		go func() {
@@ -30,21 +30,21 @@ func ExampleWithShutdown() {
 			}
 		}()
 
-		return st
+		return bg
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := st.Shutdown(ctx)
+	err := bg.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func ExampleWithShutdown_dependency() {
-	runJob := func(name string) State {
-		st, tail := WithShutdown()
+	runJob := func(name string) Background {
+		bg, tail := WithShutdown()
 
 		go func() {
 			<-tail.End()
@@ -54,20 +54,20 @@ func ExampleWithShutdown_dependency() {
 			tail.Done()
 		}()
 
-		return st
+		return bg
 	}
 
-	st1 := runJob("job 1")
-	st2 := runJob("job 2")
-	st3 := runJob("job 3")
+	bg1 := runJob("job 1")
+	bg2 := runJob("job 2")
+	bg3 := runJob("job 3")
 
-	// st3 will be shut down first, then st2, then st1
-	st := st1.DependsOn(st2).DependsOn(st3)
+	// bg3 will be shut down first, then bg2, then bg1
+	bg := bg1.DependsOn(bg2).DependsOn(bg3)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := st.Shutdown(ctx)
+	err := bg.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,8 +78,8 @@ func ExampleWithShutdown_dependency() {
 }
 
 func ExampleWithShutdown_dependencyWrap() {
-	st1 := func() State {
-		st, tail := WithShutdown()
+	bg1 := func() Background {
+		bg, tail := WithShutdown()
 
 		go func() {
 			<-tail.End()
@@ -87,11 +87,11 @@ func ExampleWithShutdown_dependencyWrap() {
 			tail.Done()
 		}()
 
-		return st
+		return bg
 	}()
 
-	// st1 will be shut down first, then st2
-	st2, tail := WithShutdown(st1)
+	// bg1 will be shut down first, then bg2
+	bg2, tail := WithShutdown(bg1)
 
 	go func() {
 		<-tail.End()
@@ -102,7 +102,7 @@ func ExampleWithShutdown_dependencyWrap() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := st2.Shutdown(ctx)
+	err := bg2.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,8 +112,8 @@ func ExampleWithShutdown_dependencyWrap() {
 }
 
 func ExampleWithWait() {
-	st := func() State {
-		st, tail := WithWait()
+	bg := func() Background {
+		bg, tail := WithWait()
 
 		for i := 1; i <= 3; i++ {
 			tail.Add(1)
@@ -126,11 +126,11 @@ func ExampleWithWait() {
 			}(i)
 		}
 
-		return st
+		return bg
 	}()
 
-	// blocks until state's WaitGroup counter is zero
-	st.Wait()
+	// blocks until Background's WaitGroup counter is zero
+	bg.Wait()
 
 	// Output: job 1 ended
 	// job 2 ended
@@ -138,11 +138,11 @@ func ExampleWithWait() {
 }
 
 func ExampleWithError() {
-	st := func() State {
+	bg := func() Background {
 		return WithError(errors.New("error"))
 	}()
 
-	if err := st.Err(); err != nil {
+	if err := bg.Err(); err != nil {
 		fmt.Println(err)
 	}
 
@@ -150,19 +150,19 @@ func ExampleWithError() {
 }
 
 func ExampleWithErrorGroup() {
-	st := func() State {
-		st, tail := WithErrorGroup()
+	bg := func() Background {
+		bg, tail := WithErrorGroup()
 
 		go func() {
 			tail.Error(errors.New("error"))
 		}()
 
-		return st
+		return bg
 	}()
 
 	time.Sleep(100 * time.Millisecond)
 
-	if err := st.Err(); err != nil {
+	if err := bg.Err(); err != nil {
 		fmt.Println(err)
 	}
 
@@ -170,19 +170,19 @@ func ExampleWithErrorGroup() {
 }
 
 func ExampleWithAnnotation() {
-	st := func() State {
-		st, tail := WithErrorGroup()
+	bg := func() Background {
+		bg, tail := WithErrorGroup()
 
 		go func() {
 			tail.Error(errors.New("error"))
 		}()
 
-		return WithAnnotation("my job", st)
+		return WithAnnotation("my job", bg)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
 
-	if err := st.Err(); err != nil {
+	if err := bg.Err(); err != nil {
 		fmt.Println(err)
 	}
 
@@ -190,8 +190,8 @@ func ExampleWithAnnotation() {
 }
 
 func ExampleWithAnnotation_shutdown() {
-	st := func() State {
-		st, tail := WithShutdown()
+	bg := func() Background {
+		bg, tail := WithShutdown()
 
 		go func() {
 			<-tail.End()
@@ -199,13 +199,13 @@ func ExampleWithAnnotation_shutdown() {
 			tail.Done()
 		}()
 
-		return WithAnnotation("my job", st)
+		return WithAnnotation("my job", bg)
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
 
-	err := st.Shutdown(ctx)
+	err := bg.Shutdown(ctx)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -214,8 +214,8 @@ func ExampleWithAnnotation_shutdown() {
 }
 
 func ExampleMerge() {
-	runJob := func(name string, duration time.Duration) State {
-		st, tail := WithShutdown()
+	runJob := func(name string, duration time.Duration) Background {
+		bg, tail := WithShutdown()
 
 		go func() {
 			<-tail.End()
@@ -226,19 +226,19 @@ func ExampleMerge() {
 			tail.Done()
 		}()
 
-		return st
+		return bg
 	}
 
-	st1 := runJob("job 1", 50*time.Millisecond)
-	st2 := runJob("job 2", 100*time.Millisecond)
-	st3 := runJob("job 3", 150*time.Millisecond)
+	bg1 := runJob("job 1", 50*time.Millisecond)
+	bg2 := runJob("job 2", 100*time.Millisecond)
+	bg3 := runJob("job 3", 150*time.Millisecond)
 
-	st := Merge(st1, st2, st3)
+	bg := Merge(bg1, bg2, bg3)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := st.Shutdown(ctx)
+	err := bg.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -253,8 +253,8 @@ func ExampleWithValue() {
 
 	var greetingKey key
 
-	getGreeting := func(st State) (c chan string, ok bool) {
-		value := st.Value(greetingKey)
+	getGreeting := func(bg Background) (c chan string, ok bool) {
+		value := bg.Value(greetingKey)
 		if value != nil {
 			return value.(chan string), true
 		}
@@ -262,18 +262,18 @@ func ExampleWithValue() {
 		return
 	}
 
-	st := func() State {
+	bg := func() Background {
 		c := make(chan string)
-		st := WithValue(greetingKey, c)
+		bg := WithValue(greetingKey, c)
 
 		go func() {
 			c <- "hi"
 		}()
 
-		return st
+		return bg
 	}()
 
-	c, ok := getGreeting(st)
+	c, ok := getGreeting(bg)
 	if ok {
 		fmt.Println(<-c)
 	}

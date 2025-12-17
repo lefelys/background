@@ -1,11 +1,11 @@
-package state
+package background
 
 import (
 	"context"
 	"sync"
 )
 
-type shutdownState struct {
+type shutdownBackground struct {
 	*group
 
 	end  chan struct{}
@@ -14,27 +14,27 @@ type shutdownState struct {
 	sync.Mutex
 }
 
-// ShutdownTail detaches after shutdownable state initialization.
+// ShutdownTail detaches after shutdownable Background initialization.
 // The tail is supposed to stay in a background job associated with
-// created State as it carries shutdown and finish signals.
+// created Background as it carries shutdown and finish signals.
 type ShutdownTail interface {
 	// End returns a channel that's closed when work done on behalf
-	// of tail's State should be shut down.
+	// of tail's Background should be shut down.
 	// Successive calls to End return the same value.
 	End() <-chan struct{}
 
 	// Done sends a signal that a shutdown is complete.
 	// Not calling Done will block all parents closing and cause
-	// the State's Shutdown call to return ErrTimeout or block forever.
+	// the Background's Shutdown call to return ErrTimeout or block forever.
 	// After the first call, subsequent calls do nothing.
 	Done()
 }
 
-func (s *shutdownState) End() (c <-chan struct{}) {
+func (s *shutdownBackground) End() (c <-chan struct{}) {
 	return s.end
 }
 
-func (s *shutdownState) Done() {
+func (s *shutdownBackground) Done() {
 	s.Lock()
 	defer s.Unlock()
 
@@ -48,7 +48,7 @@ func (s *shutdownState) Done() {
 
 // closer is used for graceful shutdown.
 type closer interface {
-	// close sends close signal to the state and blocks until the closing
+	// close sends close signal to the Background and blocks until the closing
 	// is complete.
 	close()
 
@@ -56,14 +56,14 @@ type closer interface {
 	// is complete.
 	finishSig() <-chan struct{}
 
-	// cause walks down the tree of states to find the first full path
+	// cause walks down the tree of Backgrounds to find the first full path
 	// of unclosed children to accumulate annotations. There is a
 	// chance that the closing will complete during that check -
 	// in this case it is considered as fully completed and returns nil.
 	cause() error
 }
 
-// shutdown is a function for shutting down states that implements
+// shutdown is a function for shutting down Backgrounds that implements
 // closer interface
 func shutdown(ctx context.Context, c closer) error {
 	go c.close()
@@ -76,21 +76,21 @@ func shutdown(ctx context.Context, c closer) error {
 	}
 }
 
-// WithShutdown returns a new shutdownable State that depends on children.
+// WithShutdown returns a new shutdownable Background that depends on children.
 //
-// The returned ShutdownTail's End channel is closed when State's Shutdown
+// The returned ShutdownTail's End channel is closed when Background's Shutdown
 // method is called or by its parent during graceful shutdown.
 //
 // The ShutdownTail's Done call sends a signal that the shutdown is complete,
-// which causes State's Shutdown method to return nil, or allow its parent
+// which causes Background's Shutdown method to return nil, or allow its parent
 // to shut down itself during graceful shutdown.
-func WithShutdown(children ...State) (State, ShutdownTail) {
+func WithShutdown(children ...Background) (Background, ShutdownTail) {
 	m := withShutdown(children...)
 	return m, m
 }
 
-func withShutdown(children ...State) *shutdownState {
-	s := &shutdownState{
+func withShutdown(children ...Background) *shutdownBackground {
+	s := &shutdownBackground{
 		group: merge(children...),
 		done:  make(chan struct{}),
 		end:   make(chan struct{}),
@@ -99,14 +99,14 @@ func withShutdown(children ...State) *shutdownState {
 	return s
 }
 
-// Shutdown gracefully shuts down the shutdown state.
+// Shutdown gracefully shuts down the shutdown Background.
 // Shutdown shuts down its children first, wait until all of them
 // are successfully shut down and then shuts down itself.
-func (s *shutdownState) Shutdown(ctx context.Context) error {
+func (s *shutdownBackground) Shutdown(ctx context.Context) error {
 	return shutdown(ctx, s)
 }
 
-func (s *shutdownState) close() {
+func (s *shutdownBackground) close() {
 	go s.group.close()
 	<-s.group.finishSig()
 
@@ -121,15 +121,15 @@ func (s *shutdownState) close() {
 	}
 }
 
-func (s *shutdownState) finishSig() <-chan struct{} {
+func (s *shutdownBackground) finishSig() <-chan struct{} {
 	return s.done
 }
 
-func (s *shutdownState) DependsOn(children ...State) State {
+func (s *shutdownBackground) DependsOn(children ...Background) Background {
 	return withDependency(s, children...)
 }
 
-func (s *shutdownState) cause() error {
+func (s *shutdownBackground) cause() error {
 	if err := s.group.cause(); err != nil {
 		return err
 	}

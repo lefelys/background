@@ -1,4 +1,4 @@
-package state
+package background
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 )
 
 type group struct {
-	states  []State
-	toClose map[int]struct{}
+	backgrounds []Background
+	toClose     map[int]struct{}
 
 	done, finished chan struct{}
 	ready          chan struct{}
@@ -15,13 +15,13 @@ type group struct {
 	sync.RWMutex
 }
 
-// Merge returns new State with merged children.
-func Merge(states ...State) State {
-	return merge(states...)
+// Merge returns new Background with merged children.
+func Merge(bgs ...Background) Background {
+	return merge(bgs...)
 }
 
-func merge(states ...State) *group {
-	if len(states) == 0 {
+func merge(bgs ...Background) *group {
+	if len(bgs) == 0 {
 		return &group{
 			done:     closedchan,
 			finished: closedchan,
@@ -29,13 +29,13 @@ func merge(states ...State) *group {
 	}
 
 	var (
-		ss       = make([]State, 0, len(states))
+		ss       = make([]Background, 0, len(bgs))
 		done     = make(chan struct{})
 		finished = make(chan struct{})
 		toClose  = make(map[int]struct{})
 	)
 
-	for i, s := range states {
+	for i, s := range bgs {
 		if s == nil {
 			continue
 		}
@@ -53,14 +53,14 @@ func merge(states ...State) *group {
 	}
 
 	return &group{
-		states:   ss,
-		toClose:  toClose,
-		done:     done,
-		finished: finished,
+		backgrounds: ss,
+		toClose:     toClose,
+		done:        done,
+		finished:    finished,
 	}
 }
 
-func addToCloseStream(done <-chan struct{}, c State) {
+func addToCloseStream(done <-chan struct{}, c Background) {
 	go func() {
 		<-done
 		c.close()
@@ -76,7 +76,7 @@ func (g *group) finishSig() <-chan struct{} {
 }
 
 func (g *group) Wait() {
-	for _, m := range g.states {
+	for _, m := range g.backgrounds {
 		m.Wait()
 	}
 }
@@ -93,7 +93,7 @@ func (g *group) Ready() <-chan struct{} {
 	g.ready = make(chan struct{})
 
 	go func() {
-		for _, m := range g.states {
+		for _, m := range g.backgrounds {
 			<-m.Ready()
 		}
 
@@ -115,7 +115,7 @@ func (g *group) close() {
 	g.Unlock()
 
 	for i := range g.toClose {
-		<-g.states[i].finishSig()
+		<-g.backgrounds[i].finishSig()
 		g.Lock()
 		delete(g.toClose, i)
 		g.Unlock()
@@ -125,8 +125,8 @@ func (g *group) close() {
 }
 
 func (g *group) Err() error {
-	for _, states := range g.states {
-		if err := states.Err(); err != nil {
+	for _, bg := range g.backgrounds {
+		if err := bg.Err(); err != nil {
 			return err
 		}
 	}
@@ -135,8 +135,8 @@ func (g *group) Err() error {
 }
 
 func (g *group) Value(key interface{}) (value interface{}) {
-	for _, states := range g.states {
-		if value = states.Value(key); value != nil {
+	for _, bg := range g.backgrounds {
+		if value = bg.Value(key); value != nil {
 			return value
 		}
 	}
@@ -144,7 +144,7 @@ func (g *group) Value(key interface{}) (value interface{}) {
 	return nil
 }
 
-func (g *group) DependsOn(children ...State) State {
+func (g *group) DependsOn(children ...Background) Background {
 	return withDependency(g, children...)
 }
 
@@ -152,8 +152,8 @@ func (g *group) cause() error {
 	g.RLock()
 	defer g.RUnlock()
 
-	for _, st := range g.states {
-		if err := st.cause(); err != nil {
+	for _, bg := range g.backgrounds {
+		if err := bg.cause(); err != nil {
 			return err
 		}
 	}

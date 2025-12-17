@@ -2,19 +2,20 @@ package main
 
 import (
 	"fmt"
-	"github.com/lefelys/state"
 	"time"
+
+	"github.com/lefelys/background"
 )
 
 func main() {
-	st := state.Merge(StartJob1(), StartJob2())
+	bg := background.Merge(StartJob1(), StartJob2())
 
-	st.Wait()
+	bg.Wait()
 
 }
 
-func StartJob1() state.State {
-	st, tail := state.WithWait()
+func StartJob1() background.Background {
+	bg, tail := background.WithWait()
 
 	for i := 0; i < 5; i++ {
 		tail.Add(1)
@@ -25,11 +26,11 @@ func StartJob1() state.State {
 		}()
 	}
 
-	return st
+	return bg
 }
 
-func StartJob2() state.State {
-	st, tail := state.WithWait()
+func StartJob2() background.Background {
+	bg, tail := background.WithWait()
 
 	for i := 0; i < 5; i++ {
 		tail.Add(1)
@@ -40,5 +41,5 @@ func StartJob2() state.State {
 		}()
 	}
 
-	return st
+	return bg
 }

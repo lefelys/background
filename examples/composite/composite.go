@@ -4,26 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lefelys/state"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/lefelys/background"
 )
 
 type Generator struct{}
 
-func NewGenerator() (out chan time.Time, st state.State) {
+func NewGenerator() (out chan time.Time, bg background.Background) {
 	c := Generator{}
-	out, st = c.Start()
+	out, bg = c.Start()
 
-	return out, state.WithAnnotation("generator", st)
+	return out, background.WithAnnotation("generator", bg)
 }
 
-func (c *Generator) Start() (chan time.Time, state.State) {
-	st, tail := state.WithShutdown()
+func (c *Generator) Start() (chan time.Time, background.Background) {
+	bg, tail := background.WithShutdown()
 	ticker := time.NewTicker(1 * time.Second)
 	out := make(chan time.Time)
 
@@ -40,20 +41,20 @@ func (c *Generator) Start() (chan time.Time, state.State) {
 		}
 	}()
 
-	return out, st
+	return out, bg
 }
 
 type Processor struct{}
 
-func NewProcessor(in <-chan time.Time) state.State {
+func NewProcessor(in <-chan time.Time) background.Background {
 	p := Processor{}
-	st := p.Start(in)
+	bg := p.Start(in)
 
-	return state.WithAnnotation("processor", st)
+	return background.WithAnnotation("processor", bg)
 }
 
-func (p *Processor) Start(in <-chan time.Time) (st state.State) {
-	st, tail := state.WithShutdown()
+func (p *Processor) Start(in <-chan time.Time) (bg background.Background) {
+	bg, tail := background.WithShutdown()
 
 	go func() {
 		for {
@@ -75,7 +76,7 @@ type Server struct {
 	*http.Server
 }
 
-func NewServer() state.State {
+func NewServer() background.Background {
 	server := &Server{
 		Server: &http.Server{
 			Addr:    ":8000",
@@ -83,17 +84,17 @@ func NewServer() state.State {
 		},
 	}
 
-	st := server.Start()
+	bg := server.Start()
 
-	return state.WithAnnotation("http server", st)
+	return background.WithAnnotation("http server", bg)
 }
 
 type key int
 
 var fatalKey key
 
-func getServerFatalCh(st state.State) chan error {
-	value := st.Value(fatalKey)
+func getServerFatalCh(bg background.Background) chan error {
+	value := bg.Value(fatalKey)
 	if value != nil {
 		return value.(chan error)
 	}
@@ -101,11 +102,11 @@ func getServerFatalCh(st state.State) chan error {
 	return nil
 }
 
-func (s *Server) Start() state.State {
-	shutdownSt, shutdownTail := state.WithShutdown()
-	errSt, errTail := state.WithErrorGroup()
+func (s *Server) Start() background.Background {
+	shutdownBg, shutdownTail := background.WithShutdown()
+	errBg, errTail := background.WithErrorGroup()
 	fatal := make(chan error)
-	serverFatalSt := state.WithValue(fatalKey, fatal)
+	serverFatalBg := background.WithValue(fatalKey, fatal)
 
 	go func() {
 		err := s.Server.ListenAndServe()
@@ -127,46 +128,46 @@ func (s *Server) Start() state.State {
 		shutdownTail.Done()
 	}()
 
-	return state.Merge(shutdownSt, errSt, serverFatalSt)
+	return background.Merge(shutdownBg, errBg, serverFatalBg)
 }
 
 func main() {
-	out, generatorSt := NewGenerator()
-	if err := generatorSt.Err(); err != nil {
+	out, generatorBg := NewGenerator()
+	if err := generatorBg.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	processorSt := NewProcessor(out)
-	if err := processorSt.Err(); err != nil {
+	processorBg := NewProcessor(out)
+	if err := processorBg.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	serverSt := NewServer()
-	if err := serverSt.Err(); err != nil {
+	serverBg := NewServer()
+	if err := serverBg.Err(); err != nil {
 		log.Fatal(err)
 	}
 
 	// generator will be shut down first, then processor, then server
-	appState := serverSt.
-		DependsOn(processorSt).
-		DependsOn(generatorSt)
+	appBackground := serverBg.
+		DependsOn(processorBg).
+		DependsOn(generatorBg)
 
 	shutdownSig := make(chan os.Signal, 1)
 	signal.Notify(shutdownSig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
-	case err := <-getServerFatalCh(appState):
+	case err := <-getServerFatalCh(appBackground):
 		log.Fatalf("fatal error: %v", err)
 	case <-shutdownSig:
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err := appState.Shutdown(ctx)
+		err := appBackground.Shutdown(ctx)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		if err := appState.Err(); err != nil {
+		if err := appBackground.Err(); err != nil {
 			log.Fatal(err)
 		}
 	}

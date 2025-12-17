@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/lefelys/state"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/lefelys/background"
 )
 
-func StartJob(name string) state.State {
-	st, tail := state.WithShutdown()
+func StartJob(name string) background.Background {
+	bg, tail := background.WithShutdown()
 	ticker := time.NewTicker(1 * time.Second)
 
 	go func() {
@@ -29,22 +30,22 @@ func StartJob(name string) state.State {
 		}
 	}()
 
-	return st
+	return bg
 }
 
 func main() {
-	st1 := StartJob("job1")
-	if err := st1.Err(); err != nil {
+	bg1 := StartJob("job1")
+	if err := bg1.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	st2 := StartJob("job2")
-	if err := st2.Err(); err != nil {
+	bg2 := StartJob("job2")
+	if err := bg2.Err(); err != nil {
 		log.Fatal(err)
 	}
 
 	// job2 will be shut down first, then job1
-	appSt := st1.DependsOn(st2)
+	appBg := bg1.DependsOn(bg2)
 
 	shutdownSig := make(chan os.Signal, 1)
 	signal.Notify(shutdownSig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -54,12 +55,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := appSt.Shutdown(ctx)
+	err := appBg.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := appSt.Err(); err != nil {
+	if err := appBg.Err(); err != nil {
 		log.Fatal(err)
 	}
 }
