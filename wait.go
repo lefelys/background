@@ -43,6 +43,6 @@ func (w *waitBackground) Wait() {
 	w.group.Wait()
 }
 
-func (w *waitBackground) DependsOn(children ...Background) Background {
-	return withDependency(w, children...)
+func (w *waitBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(w, before...)
 }

@@ -57,6 +57,6 @@ func (e *valueBackground) Value(key interface{}) (value interface{}) {
 	return e.group.Value(key)
 }
 
-func (e *valueBackground) DependsOn(children ...Background) Background {
-	return withDependency(e, children...)
+func (e *valueBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(e, before...)
 }

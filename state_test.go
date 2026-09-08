@@ -1129,7 +1129,7 @@ func DependencyShutdownChildrenTimeoutTest(t *testing.T) {
 	var (
 		bg1 = withShutdown()
 		bg2 = emptyBackground{}
-		bg3 = bg1.DependsOn(bg2)
+		bg3 = bg1.ShutdownAfter(bg2)
 	)
 
 	// blocked finish
@@ -1150,7 +1150,7 @@ func DependencyShutdownParentTimeoutTest(t *testing.T) {
 	var (
 		bg1 = withShutdown()
 		bg2 = withShutdown()
-		bg3 = bg1.DependsOn(bg2)
+		bg3 = bg1.ShutdownAfter(bg2)
 	)
 
 	okDone1 := runShutdownable(bg1)
@@ -1207,7 +1207,7 @@ func DependencyWaitTest(t *testing.T) {
 		okDone2 = runWaitable(bg2)
 		okDone3 = runWaitable(bg3)
 
-		bg4 = bg3.DependsOn(bg1, bg2)
+		bg4 = bg3.ShutdownAfter(bg1, bg2)
 	)
 
 	done := make(chan struct{})
@@ -1320,7 +1320,7 @@ func DependencyErrorChildrenTest(t *testing.T) {
 
 		bg1 = withError(err1)
 		bg2 = emptyBackground{}
-		bg3 = bg2.DependsOn(bg1)
+		bg3 = bg2.ShutdownAfter(bg1)
 	)
 
 	err := bg3.Err()
@@ -1336,7 +1336,7 @@ func DependencyErrorNilTest(t *testing.T) {
 	var (
 		bg1 = withError(nil)
 		bg2 = emptyBackground{}
-		bg3 = bg2.DependsOn(bg1)
+		bg3 = bg2.ShutdownAfter(bg1)
 	)
 
 	if err := bg3.Err(); err != nil {
@@ -1352,7 +1352,7 @@ func DependencyValueParentTest(t *testing.T) {
 		testValue = "test_value"
 		bg1       = emptyBackground{}
 		bg2       = emptyBackground{}
-		bg3       = bg2.DependsOn(bg1)
+		bg3       = bg2.ShutdownAfter(bg1)
 		bg4       = withValue(testKey, testValue)
 		bg5       = withDependency(bg4, bg3)
 	)
@@ -1380,9 +1380,9 @@ func DependencyValueChildrenTest(t *testing.T) {
 		testValue = "test_value"
 		bg1       = withValue(testKey, testValue)
 		bg2       = emptyBackground{}
-		bg3       = bg2.DependsOn(bg1)
+		bg3       = bg2.ShutdownAfter(bg1)
 		bg4       = emptyBackground{}
-		bg5       = bg4.DependsOn(bg3)
+		bg5       = bg4.ShutdownAfter(bg3)
 	)
 
 	value := bg5.Value(testKey)

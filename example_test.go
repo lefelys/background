@@ -42,7 +42,7 @@ func ExampleWithShutdown() {
 	}
 }
 
-func ExampleWithShutdown_dependency() {
+func ExampleBackground_ShutdownAfter() {
 	runJob := func(name string) Background {
 		bg, tail := WithShutdown()
 
@@ -62,7 +62,7 @@ func ExampleWithShutdown_dependency() {
 	bg3 := runJob("job 3")
 
 	// bg3 will be shut down first, then bg2, then bg1
-	bg := bg1.DependsOn(bg2).DependsOn(bg3)
+	bg := bg1.ShutdownAfter(bg2).ShutdownAfter(bg3)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -4,7 +4,8 @@ The package provides a simple mechanism for managing application's background jo
 
 ## Features
 
-- **Graceful Shutdown:** easily create graceful shutdown with dependencies for your application without juggling with channels and goroutines
+- **Graceful Shutdown:** easily define shutdown order for your application without juggling with channels and goroutines
+- **Readiness:** wait until all background jobs report that they are ready
 - **Waiting:** wait for completion for all waitable background jobs
 - **Annotating**: quickly find the cause of errors or frozen shutdowns
 - **Error Group**: errors propagation across the tree of backgrounds
@@ -14,9 +15,9 @@ The package provides a simple mechanism for managing application's background jo
 
 Package background defines the `Background` type, which carries errors, wait groups, shutdown signals and other values from application's background jobs.
 
-The `Background` type is aggregative - it contains multiple Backgrounds in tree form, allowing setting dependencies for graceful shutdown between them and merging multiple independent Backgrounds.
+The `Background` type is aggregative - it contains multiple Backgrounds in tree form, allowing graceful shutdown order to be set between them and multiple independent Backgrounds to be merged.
 
-To aggregate the application's background jobs, functions that initialize them create suitable `Background` and propagate it **up** in the calls stack to the layer where it will be handled, optionally merging it with other Backgrounds, setting dependencies between them and annotating.
+To aggregate the application's background jobs, functions that initialize them create suitable `Background` and propagate it **up** in the calls stack to the layer where it will be handled, optionally merging it with other Backgrounds, setting shutdown order between them and annotating.
 
 Background has some mechanic similarities with context package.
 
@@ -70,15 +71,15 @@ go get -u github.com/lefelys/background
 
 #### Creation
 
-Create a new `Background` using one of the package functions: `WithShutdown`, `WithWait`, `WithErr`, `WithErrorGroup` or `WithValue`:
+Create a new `Background` using one of the package functions: `WithShutdown`, `WithWait`, `WithReadiness`, `WithError`, `WithErrorGroup` or `WithValue`:
 
 ```go
-bg := background.WithErr(errors.New("error"))
+bg := background.WithError(errors.New("error"))
 ```
 
 #### Tails
 
-Functions `WithShutdown`, `WithWait`, and `WithErrorGroup` in addition to a new `Background` returns detached tail, which must be used for signaling in a background job associated with the `Background`. In the case of `WithShutdown`, it detaches `ShutdownTail` interface with two methods:
+Functions `WithShutdown`, `WithWait`, `WithReadiness`, and `WithErrorGroup` return a detached tail in addition to a new `Background`. The tail must be used for signaling in the background job associated with the `Background`. In the case of `WithShutdown`, it detaches a `ShutdownTail` interface with two methods:
 
 - `End() <-chan struct{}` - returns a channel that's closed when work done on behalf of tail's `Background` should be shut down.
 - `Done()` - sends a signal that the shutdown is complete.
@@ -99,6 +100,8 @@ go func() {
 	}
 }()
 ```
+
+`WithReadiness` returns a `ReadinessTail`. Call its `Ok()` method when the associated job is ready. The channel returned by `Background.Ready()` closes after every readiness Background in the tree has reported that it is ready.
 
 #### Propagation
 
@@ -157,30 +160,30 @@ func main() {
 }
 ```
 
-#### Dependency
+#### Shutdown order
 
-Dependency is used for graceful shutdown: dependent Background will shut down its children first, wait until all of them are successfully shut down and then shut down itself.
-There are 2 ways to create a dependency between Backgrounds:
+Shutdown order prevents data loss between related background jobs. A Background configured to shut down after other Backgrounds will shut them down first, wait until all of them are successfully shut down and then shut down itself.
+There are 2 ways to configure shutdown order between Backgrounds:
 
-1. By passing children Backgrounds to Background initializer:
+1. By passing the Backgrounds that should shut down first to a Background initializer:
 
 ```go
 bg1 := startJob1()
 bg2 := startJob2()
 
-// bg3 depends on bg1 and bg2
+// bg3 will shut down after bg1 and bg2
 bg3, tail := background.WithShutdown(bg1, bg2)
 ```
 
-2. By calling an existing Background's `DependsOn` method, which returns a new `Background` with set dependencies:
+2. By calling an existing Background's `ShutdownAfter` method, which returns a new `Background` with the requested shutdown order:
 
 ```go
 bg1 := StartJob1()
 bg2 := startJob2()
 bg3 := startJob3()
 
-// bg is the merged bg1, bg2 and bg3 with bg3 dependency set on bg1 and bg2
-bg := bg3.DependsOn(bg1, bg2)
+// bg is the merged bg1, bg2 and bg3; bg3 shuts down after bg1 and bg2
+bg := bg3.ShutdownAfter(bg1, bg2)
 ```
 
 ### Recommendations
@@ -212,7 +215,7 @@ type Updater interface {
 }
 
 func NewApp(server *Server, updater Updater) background.Background {
-	 bg := server.DependsOn(updater)
+	 bg := server.ShutdownAfter(updater)
 
 	 /*...*/
 }

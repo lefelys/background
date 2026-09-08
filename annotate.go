@@ -46,8 +46,8 @@ func (a *annotationBackground) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (a *annotationBackground) DependsOn(children ...Background) Background {
-	return withDependency(a, children...)
+func (a *annotationBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(a, before...)
 }
 
 func (a *annotationBackground) cause() error {

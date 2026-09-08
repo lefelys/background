@@ -144,8 +144,8 @@ func (g *group) Value(key interface{}) (value interface{}) {
 	return nil
 }
 
-func (g *group) DependsOn(children ...Background) Background {
-	return withDependency(g, children...)
+func (g *group) ShutdownAfter(before ...Background) Background {
+	return withDependency(g, before...)
 }
 
 func (g *group) cause() error {

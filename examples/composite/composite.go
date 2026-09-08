@@ -149,8 +149,8 @@ func main() {
 
 	// generator will be shut down first, then processor, then server
 	appBackground := serverBg.
-		DependsOn(processorBg).
-		DependsOn(generatorBg)
+		ShutdownAfter(processorBg).
+		ShutdownAfter(generatorBg)
 
 	shutdownSig := make(chan os.Signal, 1)
 	signal.Notify(shutdownSig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

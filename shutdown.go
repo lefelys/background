@@ -76,7 +76,8 @@ func shutdown(ctx context.Context, c closer) error {
 	}
 }
 
-// WithShutdown returns a new shutdownable Background that depends on children.
+// WithShutdown returns a new shutdownable Background that shuts down after all
+// Backgrounds in before.
 //
 // The returned ShutdownTail's End channel is closed when Background's Shutdown
 // method is called or by its parent during graceful shutdown.
@@ -84,14 +85,14 @@ func shutdown(ctx context.Context, c closer) error {
 // The ShutdownTail's Done call sends a signal that the shutdown is complete,
 // which causes Background's Shutdown method to return nil, or allow its parent
 // to shut down itself during graceful shutdown.
-func WithShutdown(children ...Background) (Background, ShutdownTail) {
-	m := withShutdown(children...)
+func WithShutdown(before ...Background) (Background, ShutdownTail) {
+	m := withShutdown(before...)
 	return m, m
 }
 
-func withShutdown(children ...Background) *shutdownBackground {
+func withShutdown(before ...Background) *shutdownBackground {
 	s := &shutdownBackground{
-		group: merge(children...),
+		group: merge(before...),
 		done:  make(chan struct{}),
 		end:   make(chan struct{}),
 	}
@@ -125,8 +126,8 @@ func (s *shutdownBackground) finishSig() <-chan struct{} {
 	return s.done
 }
 
-func (s *shutdownBackground) DependsOn(children ...Background) Background {
-	return withDependency(s, children...)
+func (s *shutdownBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(s, before...)
 }
 
 func (s *shutdownBackground) cause() error {

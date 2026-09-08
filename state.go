@@ -4,13 +4,13 @@
 // shutdown signals and other values from application's background jobs.
 //
 // The Background type is aggregative - it contains multiple backgrounds in tree form,
-// allowing setting dependencies for graceful shutdown between them and merging
+// allowing setting graceful shutdown order between them and merging
 // multiple independent backgrounds.
 //
 // To aggregate the application's background jobs, functions that initialize
 // them create suitable Background and propagate it up in the calls stack to the
 // layer where it will be handled, optionally merging it with other backgrounds,
-// setting dependencies between them and annotating along the way.
+// setting shutdown order between them and annotating along the way.
 //
 // Programs that use Background should follow these rules to keep interfaces
 // consistent:
@@ -35,7 +35,7 @@
 //	}
 //
 //	func NewApp(server *Server, updater Updater) background.Background {
-//		 bg := server.DependsOn(updater)
+//		 bg := server.ShutdownAfter(updater)
 //
 //		 /*...*/
 //	}
@@ -118,11 +118,10 @@ type Background interface {
 	// for the values stored using that key (see examples).
 	Value(key interface{}) (value interface{})
 
-	// DependsOn creates a new Background from the original and children.
-	// The new Background ensures that during shutdown it will shut down children
-	// first, wait until all of them are successfully shut down and then shut
-	// down the original Background.
-	DependsOn(children ...Background) Background
+	// ShutdownAfter creates a new Background that shuts down every Background
+	// in before first, waits until all of them are successfully shut down, and
+	// then shuts down the original Background.
+	ShutdownAfter(before ...Background) Background
 
 	// closer is a private inteface used for graceful shutdown. It is
 	// necessary to have it in exported interface for cases of embedding

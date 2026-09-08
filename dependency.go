@@ -102,12 +102,12 @@ func (d *dependBackground) Value(key interface{}) (value interface{}) {
 	return
 }
 
-func (d *dependBackground) DependsOn(children ...Background) Background {
-	return d.dependsOn(children...)
+func (d *dependBackground) ShutdownAfter(before ...Background) Background {
+	return d.shutdownAfter(before...)
 }
 
-func (d *dependBackground) dependsOn(children ...Background) *dependBackground {
-	return withDependency(d, children...)
+func (d *dependBackground) shutdownAfter(before ...Background) *dependBackground {
+	return withDependency(d, before...)
 }
 
 func (d *dependBackground) finishSig() <-chan struct{} {

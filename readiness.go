@@ -70,6 +70,6 @@ func (r *readinessBackground) Ready() <-chan struct{} {
 	return r.readyOut
 }
 
-func (r *readinessBackground) DependsOn(children ...Background) Background {
-	return withDependency(r, children...)
+func (r *readinessBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(r, before...)
 }

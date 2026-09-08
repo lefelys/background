@@ -11,8 +11,8 @@ func (e emptyBackground) Shutdown(_ context.Context) error { return nil }
 func (e emptyBackground) Wait()                            {}
 func (e emptyBackground) Ready() <-chan struct{}           { return closedchan }
 func (e emptyBackground) Value(_ interface{}) interface{}  { return nil }
-func (e emptyBackground) DependsOn(children ...Background) Background {
-	return withDependency(e, children...)
+func (e emptyBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(e, before...)
 }
 func (e emptyBackground) close()                     {}
 func (e emptyBackground) finishSig() <-chan struct{} { return closedchan }

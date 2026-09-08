@@ -45,7 +45,7 @@ func main() {
 	}
 
 	// job2 will be shut down first, then job1
-	appBg := bg1.DependsOn(bg2)
+	appBg := bg1.ShutdownAfter(bg2)
 
 	shutdownSig := make(chan os.Signal, 1)
 	signal.Notify(shutdownSig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

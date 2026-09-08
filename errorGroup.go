@@ -56,6 +56,6 @@ func (e *errGroupBackground) Errorf(format string, a ...interface{}) {
 	e.Error(fmt.Errorf(format, a...))
 }
 
-func (e *errGroupBackground) DependsOn(children ...Background) Background {
-	return withDependency(e, children...)
+func (e *errGroupBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(e, before...)
 }

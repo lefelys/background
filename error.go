@@ -31,6 +31,6 @@ func (e *errBackground) Err() (err error) {
 	return e.err
 }
 
-func (e *errBackground) DependsOn(children ...Background) Background {
-	return withDependency(e, children...)
+func (e *errBackground) ShutdownAfter(before ...Background) Background {
+	return withDependency(e, before...)
 }
